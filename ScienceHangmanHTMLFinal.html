@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Science Hangman</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Times New Roman', serif;
+            background-color: #f3f4f6;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        canvas {
+            border-radius: 1rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            background-color: white;
+            touch-action: none; /* Prevents default touch gestures like scrolling */
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-100">
+    <div class="max-w-4xl w-full flex flex-col items-center p-8 bg-white rounded-2xl shadow-xl">
+        <h1 class="text-5xl md:text-6xl font-extrabold text-gray-800 mb-8 tracking-tight">Science Hangman</h1>
+        <canvas id="gameCanvas" width="800" height="600" class="w-full h-auto max-w-4xl"></canvas>
+        <div id="messageBox" class="mt-8 text-center text-3xl font-semibold text-gray-700 min-h-[4rem]"></div>
+        <button id="resetButton" class="mt-6 px-8 py-3 bg-indigo-600 text-white font-bold text-xl rounded-full shadow-lg hover:bg-indigo-700 transition-all duration-300 transform hover:scale-105 hidden">
+            Play Again!
+        </button>
+    </div>
+
+    <script>
+        // Game variables
+        let hangmanState;
+        let wordsList;
+        let currentWord;
+        let guessedLetters;
+        let lettersButtons;
+        const radius = 25;
+        const space = 8;
+        wordsList = [
+                "QUANTUM MECHANICS",
+                "ENTROPY",
+                "BOLTZMANN",
+                "SPECTRA",
+                "FERMION",
+                "WAVE FUNCTION",
+                "SINUSOIDAL",
+                "ENTHALPY",
+                "MANIFOLD",
+                "QUADRATIC EQUATION",
+                "DARK MATTER",
+                "SUPERNOVA",
+                "BYTE",
+                "BINARY",
+                "PROTON",
+                "SPHERICAL COW"
+            ];
+        let end = false;
+        
+        // Canvas setup
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // DOM elements
+        const messageBox = document.getElementById('messageBox');
+        const resetButton = document.getElementById('resetButton');
+
+        // Drawing functions
+        function drawHangman() {
+            ctx.strokeStyle = '#374151'; // Dark gray for the hangman
+            ctx.lineWidth = 4;
+            ctx.lineCap = 'round';
+            
+            // Define a new horizontal offset for the hangman graphic
+            const hangmanOffsetX = 50; // Adjusted for a more left-aligned position
+
+            // --- The gallows are now always drawn from the start ---
+            // Base
+            ctx.beginPath();
+            ctx.moveTo(0 + hangmanOffsetX, 400);
+            ctx.lineTo(150 + hangmanOffsetX, 400);
+            ctx.stroke();
+
+            // Upright post
+            ctx.beginPath();
+            ctx.moveTo(50 + hangmanOffsetX, 400);
+            ctx.lineTo(50 + hangmanOffsetX, 100);
+            ctx.stroke();
+
+            // Crossbar
+            ctx.beginPath();
+            ctx.moveTo(50 + hangmanOffsetX, 100);
+            ctx.lineTo(200 + hangmanOffsetX, 100);
+            ctx.stroke();
+
+            // Noose
+            ctx.beginPath();
+            ctx.moveTo(200 + hangmanOffsetX, 100);
+            ctx.lineTo(200 + hangmanOffsetX, 150);
+            ctx.stroke();
+
+            // --- The stick figure parts are drawn based on hangmanState ---
+            // Head
+            if (hangmanState > 0) {
+                ctx.beginPath();
+                ctx.arc(200 + hangmanOffsetX, 180, 30, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            // Body
+            if (hangmanState > 1) {
+                ctx.beginPath();
+                ctx.moveTo(200 + hangmanOffsetX, 210);
+                ctx.lineTo(200 + hangmanOffsetX, 310);
+                ctx.stroke();
+            }
+
+            // Left Arm
+            if (hangmanState > 2) {
+                ctx.beginPath();
+                ctx.moveTo(200 + hangmanOffsetX, 240);
+                ctx.lineTo(150 + hangmanOffsetX, 280);
+                ctx.stroke();
+            }
+            
+            // Right Arm
+            if (hangmanState > 3) {
+                ctx.beginPath();
+                ctx.moveTo(200 + hangmanOffsetX, 240);
+                ctx.lineTo(250 + hangmanOffsetX, 280);
+                ctx.stroke();
+            }
+
+            // Left Leg
+            if (hangmanState > 4) {
+                ctx.beginPath();
+                ctx.moveTo(200 + hangmanOffsetX, 310);
+                ctx.lineTo(150 + hangmanOffsetX, 370);
+                ctx.stroke();
+            }
+            
+            // Right Leg
+            if (hangmanState > 5) {
+                ctx.beginPath();
+                ctx.moveTo(200 + hangmanOffsetX, 310);
+                ctx.lineTo(250 + hangmanOffsetX, 370);
+                ctx.stroke();
+            }
+        }
+
+        function drawWord() {
+            ctx.font = '40px "Times New Roman", serif';
+            ctx.fillStyle = '#1f2937'; // Dark gray
+            ctx.textAlign = 'center';
+            
+            const words = currentWord.split(' ');
+            const startY = 150 // Starting Y position for the first word
+            const lineHeight = 50; // Vertical spacing between words
+
+            words.forEach((word, index) => {
+                let displayWord = "";
+                for (const char of word) {
+                    if (guessedLetters.includes(char)) {
+                        displayWord += char + " ";
+                    } else {
+                        displayWord += "_ ";
+                    }
+                }
+                const yPos = startY + (index * lineHeight);
+                ctx.fillText(displayWord, canvas.width - 200, yPos);
+            });
+        }
+
+        function drawButtons() {
+            ctx.font = '30px "Times New Roman", serif';
+            ctx.textAlign = 'center';
+            for (const btn of lettersButtons) {
+                const [x, y, letter, visible] = btn;
+                if (visible) {
+                    ctx.beginPath();
+                    ctx.arc(x, y, radius, 0, Math.PI * 2);
+                    ctx.strokeStyle = '#374151'; // Dark gray
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    ctx.fillStyle = '#374151'; // Dark gray
+                    ctx.fillText(letter, x, y + 10);
+                }
+            }
+        }
+
+        // Game logic
+        function setupGame() {
+            hangmanState = 0;
+            const wordIndex = Math.floor(Math.random() * wordsList.length);
+            currentWord = wordsList[wordIndex];
+
+            // Remove the chosen word from the list so it can't be picked again
+            if (wordsList.length == 0) {
+                end = true;
+                messageBox.textContent = `We're out of words!`;
+                messageBox.classList.remove('text-red-600', 'text-green-600');
+                messageBox.classList.add('text-blue-600');
+                resetButton.classList.add('hidden'); 
+                draw();
+                return; // Exit the function to prevent further setup
+            }
+            
+            wordsList.splice(wordIndex, 1);
+            guessedLetters = [];
+            lettersButtons = [];
+            
+            // Adjusted coordinates to move the buttons down
+            const x_start = (canvas.width - (radius * 2 + space) * 13) / 2;
+            const y_start = 450;
+            const A = 65;
+
+            for (let i = 0; i < 26; i++) {
+                const x = x_start + space * 2 + ((radius * 2 + space) * (i % 13));
+                const y = y_start + ((i / 13 | 0) * (space + radius * 2));
+                lettersButtons.push([x, y, String.fromCharCode(A + i), true]);
+            }
+
+            messageBox.textContent = '';
+            resetButton.classList.add('hidden');
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawHangman();
+            drawButtons();
+
+            if (end == false || messageBox.textContent.includes('LOST') || messageBox.textContent.includes('WON')) {
+                drawWord();
+            }
+        }
+        
+        function checkWinLoss() {
+            let won = true;
+            for (const char of currentWord) {
+                // Ignore spaces, only check if letters have been guessed
+                if (char !== ' ' && !guessedLetters.includes(char)) {
+                    won = false;
+                    break;
+                }
+            }
+
+            if (won) {
+                messageBox.textContent = 'YOU WON!';
+                messageBox.classList.remove('text-red-600');
+                messageBox.classList.add('text-green-600');
+                resetButton.classList.remove('hidden');
+            } else if (hangmanState >= 6) { // Loss condition is after 6 wrong guesses
+                messageBox.textContent = `YOU LOST! The word was: ${currentWord}`;
+                messageBox.classList.remove('text-green-600');
+                messageBox.classList.add('text-red-600');
+                resetButton.classList.remove('hidden');
+            }
+        }
+
+        function handleGuess(event) {
+            // Get the current canvas dimensions and position
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+
+            // Get the click coordinates relative to the canvas
+            const mouseX = (event.clientX - rect.left) * scaleX;
+            const mouseY = (event.clientY - rect.top) * scaleY;
+
+            if (hangmanState < 6 && !messageBox.textContent) {
+                for (let i = 0; i < lettersButtons.length; i++) {
+                    const [x, y, letter, visible] = lettersButtons[i];
+                    const dist = Math.sqrt((x - mouseX) ** 2 + (y - mouseY) ** 2);
+
+                    if (visible && dist <= radius) {
+                        lettersButtons[i][3] = false; // Set to invisible
+                        guessedLetters.push(letter);
+                        if (!currentWord.includes(letter)) {
+                            hangmanState++;
+                        }
+                        draw();
+                        checkWinLoss();
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Event listeners
+        canvas.addEventListener('click', handleGuess);
+        resetButton.addEventListener('click', () => {
+            setupGame();
+            draw();
+        });
+
+        // The resize listener is no longer strictly needed but is good practice.
+        window.addEventListener('resize', () => {
+            // No need to update rect here anymore as it's done on every click.
+        });
+
+        // Initialize the game
+        setupGame();
+        draw();
+    </script>
+</body>
+</html>
